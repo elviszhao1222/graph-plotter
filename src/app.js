@@ -513,9 +513,9 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 		let scale = Math.pow(base, -delta / 100);
 		// Clamp per-event zoom to avoid big jumps
 		scale = Math.min(1.08, Math.max(1 / 1.08, scale));
-		const rect = canvas.getBoundingClientRect();
-		const sx = (e.clientX - rect.left);
-		const sy = (e.clientY - rect.top);
+		// Always zoom from canvas center
+		const sx = canvas.clientWidth / 2;
+		const sy = canvas.clientHeight / 2;
 		plotter.zoomAt(sx, sy, scale);
 	}
 	canvas.addEventListener('wheel', handleWheel, { passive: false });
