@@ -1,0 +1,128 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Graph Plotter</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/mathjs@11/lib/browser/math.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Graph Plotter</div>
+    <div class="controls">
+      <label for="domain-min">x min</label>
+      <input id="domain-min" type="number" value="-10" step="1">
+      <label for="domain-max">x max</label>
+      <input id="domain-max" type="number" value="10" step="1">
+      <button id="reset-view-btn" title="Reset view to origin">Reset View</button>
+      <button id="export-btn" title="Export plot config">Export</button>
+      <label class="file-btn">
+        <input id="import-file" type="file" accept="application/json" hidden>
+        <span>Import</span>
+      </label>
+      <span class="hint">Scroll to zoom, drag to pan</span>
+    </div>
+    <div class="auth-area">
+      <span id="user-label" class="user-label" hidden></span>
+      <button id="login-open-btn">Sign in</button>
+      <button id="logout-btn" hidden>Log out</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <aside class="sidebar" id="series-sidebar">
+      <div class="calculator-section">
+        <div class="sidebar-header">
+          <div class="brand small">Calculator</div>
+        </div>
+        <div class="calc-tabs">
+          <button class="calc-tab active" data-tab="integral">∫</button>
+          <button class="calc-tab" data-tab="sum">Σ</button>
+          <button class="calc-tab" data-tab="diff">d/dx</button>
+        </div>
+        <div id="calc-integral" class="calc-content active">
+          <label>f(x) =</label>
+          <input type="text" id="calc-integral-expr" placeholder="x^2 + 1">
+          <div class="calc-bounds">
+            <label>a =</label>
+            <input type="number" id="calc-integral-a" value="0" step="0.1">
+            <label>b =</label>
+            <input type="number" id="calc-integral-b" value="1" step="0.1">
+          </div>
+          <button id="calc-integral-btn">Calculate</button>
+          <div id="calc-integral-result" class="calc-result"></div>
+        </div>
+        <div id="calc-sum" class="calc-content">
+          <label>f(k) =</label>
+          <input type="text" id="calc-sum-expr" placeholder="k^2">
+          <div class="calc-bounds">
+            <label>k =</label>
+            <input type="number" id="calc-sum-start" value="1" step="1">
+            <label>to</label>
+            <input type="number" id="calc-sum-end" value="10" step="1">
+          </div>
+          <button id="calc-sum-btn">Calculate</button>
+          <div id="calc-sum-result" class="calc-result"></div>
+        </div>
+        <div id="calc-diff" class="calc-content">
+          <label>f(x) =</label>
+          <input type="text" id="calc-diff-expr" placeholder="x^2">
+          <label>x =</label>
+          <input type="number" id="calc-diff-x" value="1" step="0.1">
+          <button id="calc-diff-btn">Calculate</button>
+          <div id="calc-diff-result" class="calc-result"></div>
+        </div>
+      </div>
+      <div class="variables-section">
+        <div class="sidebar-header">
+          <div class="brand small">Variables</div>
+          <button id="add-var-btn">+</button>
+        </div>
+        <div id="variables-list" class="variables-list"></div>
+      </div>
+      <div class="series-section">
+        <div class="sidebar-header">
+          <div class="brand small">Series</div>
+          <button id="add-series-btn">Add</button>
+        </div>
+        <div id="series-list" class="series-list"></div>
+      </div>
+    </aside>
+    <div class="resizer" id="sidebar-resizer" title="Drag to resize"></div>
+    <div class="canvas-wrap">
+      <canvas id="plot-canvas"></canvas>
+      <div id="error" class="error" hidden></div>
+      <div id="intercept-tooltip" class="intercept-tooltip" hidden></div>
+    </div>
+  </main>
+
+  <!-- Auth Modal -->
+  <div id="auth-backdrop" class="modal-backdrop" hidden></div>
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal-header">
+      <div class="modal-tabs">
+        <button id="tab-login" class="active">Login</button>
+        <button id="tab-signup">Create Account</button>
+      </div>
+      <button id="modal-close" class="modal-close" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <label>Email</label>
+      <input id="auth-email" type="email" placeholder="you@example.com">
+      <label>Password</label>
+      <input id="auth-password" type="password" placeholder="••••••••">
+      <div class="modal-actions">
+        <button id="login-btn">Login</button>
+        <button id="signup-btn" hidden>Create Account</button>
+      </div>
+      <div id="auth-error" class="auth-error" hidden></div>
+    </div>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+  <script type="module" src="src/auth.js"></script>
+</body>
+</html>
