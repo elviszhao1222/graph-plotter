@@ -505,19 +505,22 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 	let lastX = 0;
 	let lastY = 0;
 
-	canvas.addEventListener('wheel', (e) => {
+	function handleWheel(e) {
+		// Normalize delta across devices (pixels vs lines)
 		e.preventDefault();
-		// Gentler, delta-aware zoom. Typical mouse wheel deltaY ~ ±100 per notch
-		const base = 1.04; // adjust to tune sensitivity
-		let scale = Math.pow(base, -e.deltaY / 100);
-		// Clamp per-event zoom to avoid big jumps on high-sensitivity devices
-		scale = Math.min(1.12, Math.max(1 / 1.12, scale));
+		const delta = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY; // lines->px approx
+		const base = 1.035; // gentle zoom per event
+		let scale = Math.pow(base, -delta / 100);
+		// Clamp per-event zoom to avoid big jumps
+		scale = Math.min(1.08, Math.max(1 / 1.08, scale));
 		const rect = canvas.getBoundingClientRect();
-		// Use CSS pixel coordinates; the plotter handles DPR via setTransform
 		const sx = (e.clientX - rect.left);
 		const sy = (e.clientY - rect.top);
 		plotter.zoomAt(sx, sy, scale);
-	}, { passive: false });
+	}
+	canvas.addEventListener('wheel', handleWheel, { passive: false });
+	// Also listen on the wrapper to catch events when canvas has no focus
+	canvas.parentElement.addEventListener('wheel', handleWheel, { passive: false });
 
 	canvas.addEventListener('mousedown', (e) => {
 		isPanning = true;
