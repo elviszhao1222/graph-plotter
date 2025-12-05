@@ -244,6 +244,33 @@ body { display: flex; flex-direction: column; }
 }
 .calc-result .katex { font-size: 1.1em; }
 
+/* My Graphs */
+.my-graphs-section { margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #1f2430; }
+.saved-graphs-list { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
+.saved-graph-item {
+  background: var(--panel);
+  border: 1px solid #1f2430;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.saved-graph-item:hover { background: #1a1f2e; }
+.saved-graph-name { flex: 1; font-size: 0.9rem; color: var(--text); }
+.saved-graph-actions { display: flex; gap: 4px; }
+.saved-graph-actions button {
+  background: #334155;
+  color: #e6e6e6;
+  border: 1px solid #475569;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+.saved-graph-actions button:hover { background: #475569; }
+
 /* Variables */
 .variables-section, .series-section { margin-bottom: 16px; }
 .variables-list { display: flex; flex-direction: column; gap: 8px; }

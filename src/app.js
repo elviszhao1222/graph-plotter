@@ -1,5 +1,6 @@
 import { Plotter } from './plotter.js';
 import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from './auth.js';
+import { graphsAPI } from './api.js';
 
 (function () {
 	const canvas = document.getElementById('plot-canvas');
@@ -14,6 +15,10 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 	const addSeriesBtn = document.getElementById('add-series-btn');
 	const variablesList = document.getElementById('variables-list');
 	const addVarBtn = document.getElementById('add-var-btn');
+	const myGraphsSection = document.getElementById('my-graphs-section');
+	const saveGraphBtn = document.getElementById('save-graph-btn');
+	const refreshGraphsBtn = document.getElementById('refresh-graphs-btn');
+	const savedGraphsList = document.getElementById('saved-graphs-list');
 
 	// Auth elements
 	const loginOpenBtn = document.getElementById('login-open-btn');
@@ -625,6 +630,18 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 	renderSidebar();
 	replotFromInputs();
 
+	// Handle share token in URL
+	const urlParams = new URLSearchParams(window.location.search);
+	const shareToken = urlParams.get('share') || window.location.pathname.split('/share/')[1];
+	if (shareToken) {
+		graphsAPI.getByShareToken(shareToken).then(graph => {
+			applyConfig(graph.config);
+			setError('');
+		}).catch(err => {
+			setError('Failed to load shared graph: ' + err.message);
+		});
+	}
+
 	// ===== Auth UI =====
 	function openModal(mode) {
 		setAuthMode(mode);
@@ -681,6 +698,140 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 		}
 	}));
 
+	// ===== Graph Management (Cloud Storage) =====
+	let savedGraphs = [];
+	let currentGraphId = null;
+
+	async function loadSavedGraphs() {
+		const user = getCurrentUser();
+		if (!user) {
+			savedGraphs = [];
+			renderSavedGraphs();
+			return;
+		}
+
+		try {
+			savedGraphs = await graphsAPI.getAll();
+			renderSavedGraphs();
+		} catch (error) {
+			console.warn('Failed to load graphs from cloud:', error);
+			savedGraphs = [];
+			renderSavedGraphs();
+		}
+	}
+
+	function renderSavedGraphs() {
+		savedGraphsList.innerHTML = '';
+		if (savedGraphs.length === 0) {
+			const empty = document.createElement('div');
+			empty.className = 'saved-graph-item';
+			empty.textContent = 'No saved graphs';
+			empty.style.color = 'var(--muted)';
+			empty.style.fontSize = '0.85rem';
+			savedGraphsList.appendChild(empty);
+			return;
+		}
+
+		for (const graph of savedGraphs) {
+			const item = document.createElement('div');
+			item.className = 'saved-graph-item';
+			const name = document.createElement('div');
+			name.className = 'saved-graph-name';
+			name.textContent = graph.name || 'Untitled Graph';
+			item.appendChild(name);
+
+			const actions = document.createElement('div');
+			actions.className = 'saved-graph-actions';
+			const loadBtn = document.createElement('button');
+			loadBtn.textContent = 'Load';
+			loadBtn.title = 'Load this graph';
+			loadBtn.addEventListener('click', () => loadGraph(graph.id));
+			actions.appendChild(loadBtn);
+
+			const shareBtn = document.createElement('button');
+			shareBtn.textContent = 'Share';
+			shareBtn.title = 'Get share link';
+			shareBtn.addEventListener('click', () => showShareDialog(graph.id));
+			actions.appendChild(shareBtn);
+
+			const delBtn = document.createElement('button');
+			delBtn.textContent = '×';
+			delBtn.title = 'Delete';
+			delBtn.addEventListener('click', () => deleteGraph(graph.id));
+			actions.appendChild(delBtn);
+
+			item.appendChild(actions);
+			savedGraphsList.appendChild(item);
+		}
+	}
+
+	async function saveCurrentGraph() {
+		const user = getCurrentUser();
+		if (!user) {
+			setError('Please login to save graphs to cloud');
+			return;
+		}
+
+		try {
+			const config = collectUserConfig();
+			const name = prompt('Enter graph name:', 'My Graph');
+			if (!name) return;
+
+			if (currentGraphId) {
+				await graphsAPI.update(currentGraphId, { name, config });
+				setError('');
+			} else {
+				const result = await graphsAPI.create(name, config);
+				currentGraphId = result.id;
+				setError('');
+			}
+			await loadSavedGraphs();
+		} catch (error) {
+			setError('Failed to save: ' + error.message);
+		}
+	}
+
+	async function loadGraph(id) {
+		try {
+			const graph = await graphsAPI.getById(id);
+			applyConfig(graph.config);
+			currentGraphId = id;
+			setError('');
+		} catch (error) {
+			setError('Failed to load: ' + error.message);
+		}
+	}
+
+	async function deleteGraph(id) {
+		if (!confirm('Delete this graph?')) return;
+		try {
+			await graphsAPI.delete(id);
+			if (currentGraphId === id) currentGraphId = null;
+			await loadSavedGraphs();
+			setError('');
+		} catch (error) {
+			setError('Failed to delete: ' + error.message);
+		}
+	}
+
+	async function showShareDialog(graphId) {
+		try {
+			const result = await graphsAPI.getShareLink(graphId);
+			const url = window.location.origin + '/share/' + result.shareToken;
+			const shareText = `Share this graph: ${url}`;
+			if (navigator.share) {
+				await navigator.share({ title: 'Graph Plotter', text: shareText, url });
+			} else {
+				prompt('Share link (copy this):', url);
+			}
+		} catch (error) {
+			setError('Failed to get share link: ' + error.message);
+		}
+	}
+
+	saveGraphBtn.addEventListener('click', saveCurrentGraph);
+	refreshGraphsBtn.addEventListener('click', loadSavedGraphs);
+
 	// Update topbar based on auth state
 	onAuthStateChanged((user) => {
 		if (user) {
@@ -688,15 +839,19 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 			userLabel.hidden = false;
 			logoutBtn.hidden = false;
 			loginOpenBtn.hidden = true;
-			// Load saved config for this user
+			myGraphsSection.hidden = false;
+			loadSavedGraphs();
+			// Fallback: Load from localStorage if API fails
 			const saved = localStorage.getItem('gp_cfg_' + user.email);
-			if (saved) {
+			if (saved && savedGraphs.length === 0) {
 				try { applyConfig(JSON.parse(saved)); } catch (_) {}
 			}
 		} else {
 			userLabel.hidden = true;
 			logoutBtn.hidden = true;
 			loginOpenBtn.hidden = false;
+			myGraphsSection.hidden = true;
+			currentGraphId = null;
 		}
 	});
 
@@ -705,7 +860,14 @@ import { createAccount, login, logout, onAuthStateChanged, getCurrentUser } from
 		const u = getCurrentUser();
 		if (!u) return;
 		const cfg = collectUserConfig(xMin, xMax);
+		// Save to localStorage as backup
 		localStorage.setItem('gp_cfg_' + u.email, JSON.stringify(cfg));
+		// Auto-save to cloud if graph is already saved
+		if (currentGraphId) {
+			graphsAPI.update(currentGraphId, { config: cfg }).catch(() => {
+				// Silent fail - localStorage backup is fine
+			});
+		}
 	}
 
 	function collectUserConfig(xMin = Number(xMinInput.value), xMax = Number(xMaxInput.value)) {

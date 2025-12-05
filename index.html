@@ -45,7 +45,7 @@
         </div>
         <div id="calc-integral" class="calc-content active">
           <label>f(x) =</label>
-          <input type="text" id="calc-integral-expr" placeholder="x^2 + 1">
+          <input type="text" id="calc-integral-expr" placeholder="Enter an expression">
           <div class="calc-bounds">
             <label>a =</label>
             <input type="number" id="calc-integral-a" value="0" step="0.1">
@@ -57,7 +57,7 @@
         </div>
         <div id="calc-sum" class="calc-content">
           <label>f(k) =</label>
-          <input type="text" id="calc-sum-expr" placeholder="k^2">
+          <input type="text" id="calc-sum-expr" placeholder="Enter an expression">
           <div class="calc-bounds">
             <label>k =</label>
             <input type="number" id="calc-sum-start" value="1" step="1">
@@ -69,12 +69,20 @@
         </div>
         <div id="calc-diff" class="calc-content">
           <label>f(x) =</label>
-          <input type="text" id="calc-diff-expr" placeholder="x^2">
+          <input type="text" id="calc-diff-expr" placeholder="Enter an expression">
           <label>x =</label>
           <input type="number" id="calc-diff-x" value="1" step="0.1">
           <button id="calc-diff-btn">Calculate</button>
           <div id="calc-diff-result" class="calc-result"></div>
         </div>
+      </div>
+      <div class="my-graphs-section" id="my-graphs-section" hidden>
+        <div class="sidebar-header">
+          <div class="brand small">My Graphs</div>
+          <button id="save-graph-btn" title="Save current graph">💾</button>
+          <button id="refresh-graphs-btn" title="Refresh">↻</button>
+        </div>
+        <div id="saved-graphs-list" class="saved-graphs-list"></div>
       </div>
       <div class="variables-section">
         <div class="sidebar-header">
@@ -122,7 +130,8 @@
     </div>
   </div>
 
-  <script type="module" src="src/app.js"></script>
+  <script type="module" src="src/api.js"></script>
   <script type="module" src="src/auth.js"></script>
+  <script type="module" src="src/app.js"></script>
 </body>
 </html>
