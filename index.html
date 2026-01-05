@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Graph Plotter</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <script src="https://cdn.jsdelivr.net/npm/mathjs@11/lib/browser/math.js"></script>
@@ -11,6 +12,7 @@
 </head>
 <body>
   <header class="topbar">
+    <button id="docs-toggle-btn" class="docs-toggle-btn" title="Open saved documents">☰</button>
     <div class="brand">Graph Plotter</div>
     <div class="controls">
       <label for="domain-min">x min</label>
@@ -31,6 +33,21 @@
       <button id="logout-btn" hidden>Log out</button>
     </div>
   </header>
+
+  <!-- Documents Sidebar -->
+  <aside class="docs-sidebar" id="docs-sidebar">
+    <div class="docs-sidebar-header">
+      <div class="brand small">My Documents</div>
+      <button id="docs-close-btn" class="docs-close-btn" title="Close">✕</button>
+    </div>
+    <div class="docs-sidebar-content">
+      <div class="docs-actions">
+        <button id="docs-save-btn" class="docs-action-btn">💾 Save Current</button>
+        <button id="docs-refresh-btn" class="docs-action-btn">↻ Refresh</button>
+      </div>
+      <div id="docs-list" class="docs-list"></div>
+    </div>
+  </aside>
 
   <main class="stage">
     <aside class="sidebar" id="series-sidebar">
@@ -130,8 +147,6 @@
     </div>
   </div>
 
-  <script type="module" src="src/api.js"></script>
-  <script type="module" src="src/auth.js"></script>
   <script type="module" src="src/app.js"></script>
 </body>
 </html>

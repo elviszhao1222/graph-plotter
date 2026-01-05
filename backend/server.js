@@ -204,7 +204,10 @@ app.get('/api/graphs/:id', authenticateToken, (req, res) => {
 // Create graph
 app.post('/api/graphs', authenticateToken, (req, res) => {
   const { name, config } = req.body;
+  console.log('Create graph request:', { name, hasConfig: !!config, userId: req.user.userId });
+  
   if (!config) {
+    console.error('Create graph error: config required');
     return res.status(400).json({ error: 'Graph config required' });
   }
 
@@ -216,8 +219,10 @@ app.post('/api/graphs', authenticateToken, (req, res) => {
     [id, req.user.userId, name || 'Untitled Graph', JSON.stringify(config), shareToken],
     function(err) {
       if (err) {
-        return res.status(500).json({ error: 'Failed to create graph' });
+        console.error('Database error creating graph:', err);
+        return res.status(500).json({ error: 'Failed to create graph', message: err.message });
       }
+      console.log('Graph created successfully:', id);
       res.json({ id, shareToken, message: 'Graph saved successfully' });
     }
   );
@@ -227,10 +232,15 @@ app.post('/api/graphs', authenticateToken, (req, res) => {
 app.put('/api/graphs/:id', authenticateToken, (req, res) => {
   const { id } = req.params;
   const { name, config, is_public } = req.body;
+  console.log('Update graph request:', { id, name, hasConfig: !!config, userId: req.user.userId });
 
   // Check ownership
   db.get('SELECT user_id FROM graphs WHERE id = ?', [id], (err, graph) => {
-    if (err || !graph) {
+    if (err) {
+      console.error('Database error checking graph:', err);
+      return res.status(500).json({ error: 'Database error', message: err.message });
+    }
+    if (!graph) {
       return res.status(404).json({ error: 'Graph not found' });
     }
     if (graph.user_id !== req.user.userId) {
@@ -251,17 +261,22 @@ app.put('/api/graphs/:id', authenticateToken, (req, res) => {
       updates.push('is_public = ?');
       values.push(is_public ? 1 : 0);
     }
+    
+    // Always update the timestamp, even if no other fields changed
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
 
+    // Always execute the UPDATE to refresh updated_at timestamp
     db.run(
       `UPDATE graphs SET ${updates.join(', ')} WHERE id = ?`,
       values,
       function(err) {
         if (err) {
-          return res.status(500).json({ error: 'Failed to update graph' });
+          console.error('Database error updating graph:', err);
+          return res.status(500).json({ error: 'Failed to update graph', message: err.message });
         }
-        res.json({ message: 'Graph updated successfully' });
+        console.log('Graph updated successfully:', id);
+        res.json({ id, message: 'Graph updated successfully' });
       }
     );
   });
@@ -328,7 +343,67 @@ app.post('/api/graphs/:id/share', authenticateToken, (req, res) => {
   });
 });
 
-// Get graph by share token (public access)
+// Create or get shareable link (must be before /api/graphs/:id routes to avoid conflicts)
+app.post('/api/graphs/:id/share-link', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  
+  // Get graph and verify ownership
+  db.get('SELECT share_token, is_public FROM graphs WHERE id = ? AND user_id = ?', [id, req.user.userId], (err, graph) => {
+    if (err) {
+      console.error('Database error in share-link:', err);
+      return res.status(500).json({ error: 'Database error', message: err.message });
+    }
+    if (!graph) {
+      return res.status(404).json({ error: 'Graph not found' });
+    }
+    
+    // If no share token exists, create one
+    if (!graph.share_token) {
+      const shareToken = uuidv4();
+      db.run('UPDATE graphs SET share_token = ?, is_public = 1 WHERE id = ?', [shareToken, id], (updateErr) => {
+        if (updateErr) {
+          console.error('Failed to update graph with share token:', updateErr);
+          return res.status(500).json({ error: 'Failed to create share link', message: updateErr.message });
+        }
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+        res.json({
+          shareToken: shareToken,
+          isPublic: true,
+          shareUrl: `${frontendUrl}?share=${shareToken}`
+        });
+      });
+    } else {
+      // Share token already exists, just return it
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+      res.json({
+        shareToken: graph.share_token,
+        isPublic: graph.is_public === 1,
+        shareUrl: `${frontendUrl}?share=${graph.share_token}`
+      });
+    }
+  });
+});
+
+// Get shareable link (GET method for compatibility)
+app.get('/api/graphs/:id/share-link', authenticateToken, (req, res) => {
+  const { id } = req.params;
+  db.get('SELECT share_token, is_public FROM graphs WHERE id = ? AND user_id = ?', [id, req.user.userId], (err, graph) => {
+    if (err || !graph) {
+      return res.status(404).json({ error: 'Graph not found' });
+    }
+    if (!graph.share_token) {
+      return res.status(404).json({ error: 'Share link not created. Use POST to create one.' });
+    }
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
+    res.json({
+      shareToken: graph.share_token,
+      isPublic: graph.is_public === 1,
+      shareUrl: `${frontendUrl}?share=${graph.share_token}`
+    });
+  });
+});
+
+// Get graph by share token (public access) - must be after /share-link routes
 app.get('/api/graphs/share/:token', (req, res) => {
   const { token } = req.params;
   db.get('SELECT * FROM graphs WHERE share_token = ? AND is_public = 1', [token], (err, graph) => {
@@ -343,20 +418,18 @@ app.get('/api/graphs/share/:token', (req, res) => {
   });
 });
 
-// Get shareable link
-app.get('/api/graphs/:id/share-link', authenticateToken, (req, res) => {
-  const { id } = req.params;
-  db.get('SELECT share_token, is_public FROM graphs WHERE id = ? AND user_id = ?', [id, req.user.userId], (err, graph) => {
-    if (err || !graph) {
-      return res.status(404).json({ error: 'Graph not found' });
-    }
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5174';
-    res.json({
-      shareToken: graph.share_token,
-      isPublic: graph.is_public === 1,
-      shareUrl: `${frontendUrl}?share=${graph.share_token}`
-    });
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  res.status(err.status || 500).json({ 
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
   });
+});
+
+// 404 handler for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
 });
 
 app.listen(PORT, () => {

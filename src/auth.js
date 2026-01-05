@@ -124,8 +124,11 @@ export function logout() {
 			const data = await authAPI.getCurrentUser();
 			setCurrentUser(data.user);
 			useAPI = true;
-		} catch (_) {
+		} catch (err) {
+			console.warn('Failed to verify auth token:', err.message);
 			useAPI = false;
+			// Clear invalid token
+			setAuthToken(null);
 		}
 	}
 })();

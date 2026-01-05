@@ -109,6 +109,10 @@ export class Plotter {
 	resizeToDisplaySize() {
 		const cssWidth = Math.floor(this.canvas.clientWidth);
 		const cssHeight = Math.floor(this.canvas.clientHeight);
+		if (cssWidth === 0 || cssHeight === 0) {
+			// Canvas not ready yet, skip drawing
+			return;
+		}
 		const dpr = window.devicePixelRatio || 1;
 		this.devicePixelRatio = dpr;
 

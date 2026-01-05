@@ -38,6 +38,14 @@ import { graphsAPI } from './api.js';
 	const plotter = new Plotter(canvas);
 	const tooltip = document.getElementById('intercept-tooltip');
 
+	// Documents sidebar elements
+	const docsToggleBtn = document.getElementById('docs-toggle-btn');
+	const docsSidebar = document.getElementById('docs-sidebar');
+	const docsCloseBtn = document.getElementById('docs-close-btn');
+	const docsList = document.getElementById('docs-list');
+	const docsSaveBtn = document.getElementById('docs-save-btn');
+	const docsRefreshBtn = document.getElementById('docs-refresh-btn');
+
 	function setError(message) {
 		if (message) {
 			errorDiv.textContent = message;
@@ -51,6 +59,9 @@ import { graphsAPI } from './api.js';
 
 	function compileExpression(exprText, varValues = {}) {
 		// Use math.js to compile expression f(x) with variable context
+		if (typeof math === 'undefined') {
+			throw new Error('Math.js is not loaded. Please check your internet connection.');
+		}
 		const node = math.parse(exprText);
 		const code = node.compile();
 		return (x) => {
@@ -61,6 +72,9 @@ import { graphsAPI } from './api.js';
 
 	function compileExpression2D(exprText, varValues = {}) {
 		// For relations: F(x,y) with variables
+		if (typeof math === 'undefined') {
+			throw new Error('Math.js is not loaded. Please check your internet connection.');
+		}
 		const node = math.parse(exprText);
 		const code = node.compile();
 		return (x, y) => {
@@ -478,31 +492,74 @@ import { graphsAPI } from './api.js';
 	}
 
 	function applyConfig(cfg) {
-		if (!cfg || !Array.isArray(cfg.series)) throw new Error('Bad config');
-		xMinInput.value = cfg.xMin ?? -10;
-		xMaxInput.value = cfg.xMax ?? 10;
-		seriesConfigs = cfg.series.map(s => ({
-			id: s.id || ('s' + Math.random().toString(36).slice(2, 9)),
-			name: s.name || '',
-			type: s.type || 'cartesian',
-			expr: s.expr || 'sin(x)',
-			visible: s.visible !== false,
-			color: s.color || palette[0],
-			derivative: !!s.derivative,
-		}));
-		if (Array.isArray(cfg.variables)) {
-			variablesConfigs = cfg.variables.map(v => ({
-				id: v.id || ('v' + Math.random().toString(36).slice(2, 9)),
-				name: v.name || '',
-				value: v.value ?? 1,
-				min: v.min ?? -10,
-				max: v.max ?? 10,
-				step: v.step ?? 0.1,
+		try {
+			if (!cfg) throw new Error('Bad config: missing config object');
+			
+			// Handle case where config might be a string (JSON)
+			if (typeof cfg === 'string') {
+				try {
+					cfg = JSON.parse(cfg);
+				} catch (e) {
+					throw new Error('Invalid config format: not valid JSON');
+				}
+			}
+			
+			// Ensure series array exists
+			if (!Array.isArray(cfg.series)) {
+				// If no series, create a default one
+				cfg.series = [{ 
+					id: 's' + Math.random().toString(36).slice(2, 9), 
+					name: 'f1', 
+					type: 'cartesian', 
+					expr: 'sin(x)', 
+					visible: true, 
+					color: palette[0], 
+					derivative: false 
+				}];
+			}
+			
+			// Apply domain settings
+			xMinInput.value = cfg.xMin ?? -10;
+			xMaxInput.value = cfg.xMax ?? 10;
+			
+			// Apply series configs
+			seriesConfigs = cfg.series.map(s => ({
+				id: s.id || ('s' + Math.random().toString(36).slice(2, 9)),
+				name: s.name || '',
+				type: s.type || 'cartesian',
+				expr: s.expr || 'sin(x)',
+				visible: s.visible !== false,
+				color: s.color || palette[0],
+				derivative: !!s.derivative,
 			}));
+			
+			// Apply variables configs
+			if (Array.isArray(cfg.variables)) {
+				variablesConfigs = cfg.variables.map(v => ({
+					id: v.id || ('v' + Math.random().toString(36).slice(2, 9)),
+					name: v.name || '',
+					value: v.value ?? 1,
+					min: v.min ?? -10,
+					max: v.max ?? 10,
+					step: v.step ?? 0.1,
+				}));
+			} else {
+				variablesConfigs = [];
+			}
+			
+			// Render UI
+			renderVariables();
+			renderSidebar();
+			
+			// Ensure canvas is ready before replotting
+			setTimeout(() => {
+				resizeCanvasToFill();
+				replotFromInputs();
+			}, 50);
+		} catch (error) {
+			console.error('applyConfig error:', error, 'Config:', cfg);
+			throw error;
 		}
-		renderVariables();
-		renderSidebar();
-		replotFromInputs();
 	}
 
 	// Interactions: zoom (wheel) and pan (drag)
@@ -615,20 +672,41 @@ import { graphsAPI } from './api.js';
 	// Resize canvas to fill available space
 	function resizeCanvasToFill() {
 		const parent = canvas.parentElement;
-		const width = parent.clientWidth;
-		const height = Math.max(200, window.innerHeight - document.querySelector('.topbar').offsetHeight);
+		if (!parent) return;
+		const width = parent.clientWidth || window.innerWidth;
+		const topbar = document.querySelector('.topbar');
+		const topbarHeight = topbar ? topbar.offsetHeight : 0;
+		const height = Math.max(200, window.innerHeight - topbarHeight);
 		canvas.style.width = width + 'px';
 		canvas.style.height = height + 'px';
-		plotter.resizeToDisplaySize();
+		if (plotter) {
+			plotter.resizeToDisplaySize();
+		}
 	}
 	window.addEventListener('resize', resizeCanvasToFill);
-	resizeCanvasToFill();
+	// Delay initial resize to ensure DOM is ready
+	setTimeout(() => {
+		resizeCanvasToFill();
+	}, 0);
 
 	// Initial state: one default series
 	seriesConfigs = [defaultSeries('f1')];
 	renderVariables();
 	renderSidebar();
-	replotFromInputs();
+	// Ensure canvas is ready before plotting
+	setTimeout(() => {
+		resizeCanvasToFill();
+		// Force a redraw after resize
+		if (plotter && plotter.canvas.clientWidth > 0 && plotter.canvas.clientHeight > 0) {
+			replotFromInputs();
+		} else {
+			// Retry if canvas not ready
+			setTimeout(() => {
+				resizeCanvasToFill();
+				replotFromInputs();
+			}, 200);
+		}
+	}, 100);
 
 	// Handle share token in URL
 	const urlParams = new URLSearchParams(window.location.search);
@@ -638,6 +716,7 @@ import { graphsAPI } from './api.js';
 			applyConfig(graph.config);
 			setError('');
 		}).catch(err => {
+			console.warn('Failed to load shared graph:', err.message);
 			setError('Failed to load shared graph: ' + err.message);
 		});
 	}
@@ -707,16 +786,29 @@ import { graphsAPI } from './api.js';
 		if (!user) {
 			savedGraphs = [];
 			renderSavedGraphs();
+			renderDocsList();
 			return;
 		}
 
 		try {
 			savedGraphs = await graphsAPI.getAll();
 			renderSavedGraphs();
+			renderDocsList();
 		} catch (error) {
 			console.warn('Failed to load graphs from cloud:', error);
+			// If authentication failed, clear invalid token and user state
+			if (error.message.includes('Authentication required') || error.message.includes('Invalid or expired token')) {
+				console.warn('Authentication token invalid, clearing user session');
+				logout();
+				savedGraphs = [];
+				renderSavedGraphs();
+				renderDocsList();
+				// Don't show error to user - they just need to log in again
+				return;
+			}
 			savedGraphs = [];
 			renderSavedGraphs();
+			renderDocsList();
 		}
 	}
 
@@ -729,39 +821,115 @@ import { graphsAPI } from './api.js';
 			empty.style.color = 'var(--muted)';
 			empty.style.fontSize = '0.85rem';
 			savedGraphsList.appendChild(empty);
+		} else {
+			for (const graph of savedGraphs) {
+				const item = document.createElement('div');
+				item.className = 'saved-graph-item';
+				const name = document.createElement('div');
+				name.className = 'saved-graph-name';
+				name.textContent = graph.name || 'Untitled Graph';
+				item.appendChild(name);
+
+				const actions = document.createElement('div');
+				actions.className = 'saved-graph-actions';
+				const loadBtn = document.createElement('button');
+				loadBtn.textContent = 'Load';
+				loadBtn.title = 'Load this graph';
+				loadBtn.addEventListener('click', () => loadGraph(graph.id));
+				actions.appendChild(loadBtn);
+
+				const shareBtn = document.createElement('button');
+				shareBtn.textContent = 'Share';
+				shareBtn.title = 'Get share link';
+				shareBtn.addEventListener('click', () => showShareDialog(graph.id));
+				actions.appendChild(shareBtn);
+
+				const delBtn = document.createElement('button');
+				delBtn.textContent = '×';
+				delBtn.title = 'Delete';
+				delBtn.addEventListener('click', () => deleteGraph(graph.id));
+				actions.appendChild(delBtn);
+
+				item.appendChild(actions);
+				savedGraphsList.appendChild(item);
+			}
+		}
+		// Also render in docs sidebar
+		renderDocsList();
+	}
+
+	function renderDocsList() {
+		docsList.innerHTML = '';
+		if (savedGraphs.length === 0) {
+			const empty = document.createElement('div');
+			empty.className = 'doc-item';
+			empty.style.textAlign = 'center';
+			empty.style.color = 'var(--muted)';
+			empty.style.padding = '20px';
+			empty.textContent = 'No saved documents yet';
+			docsList.appendChild(empty);
 			return;
 		}
 
 		for (const graph of savedGraphs) {
 			const item = document.createElement('div');
-			item.className = 'saved-graph-item';
+			item.className = 'doc-item';
+			if (currentGraphId === graph.id) {
+				item.classList.add('active');
+			}
+
 			const name = document.createElement('div');
-			name.className = 'saved-graph-name';
+			name.className = 'doc-item-name';
 			name.textContent = graph.name || 'Untitled Graph';
 			item.appendChild(name);
 
+			const meta = document.createElement('div');
+			meta.className = 'doc-item-meta';
+			const date = graph.updated_at || graph.created_at;
+			if (date) {
+				const dateObj = new Date(date);
+				meta.textContent = dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+			}
+			item.appendChild(meta);
+
 			const actions = document.createElement('div');
-			actions.className = 'saved-graph-actions';
+			actions.className = 'doc-item-actions';
+			
 			const loadBtn = document.createElement('button');
 			loadBtn.textContent = 'Load';
-			loadBtn.title = 'Load this graph';
-			loadBtn.addEventListener('click', () => loadGraph(graph.id));
+			loadBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				loadGraph(graph.id);
+			});
 			actions.appendChild(loadBtn);
 
 			const shareBtn = document.createElement('button');
 			shareBtn.textContent = 'Share';
-			shareBtn.title = 'Get share link';
-			shareBtn.addEventListener('click', () => showShareDialog(graph.id));
+			shareBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				showShareDialog(graph.id);
+			});
 			actions.appendChild(shareBtn);
 
 			const delBtn = document.createElement('button');
-			delBtn.textContent = '×';
-			delBtn.title = 'Delete';
-			delBtn.addEventListener('click', () => deleteGraph(graph.id));
+			delBtn.textContent = 'Delete';
+			delBtn.className = 'delete';
+			delBtn.addEventListener('click', (e) => {
+				e.stopPropagation();
+				deleteGraph(graph.id);
+			});
 			actions.appendChild(delBtn);
 
 			item.appendChild(actions);
-			savedGraphsList.appendChild(item);
+			
+			// Click on item to load
+			item.addEventListener('click', (e) => {
+				if (e.target.tagName !== 'BUTTON') {
+					loadGraph(graph.id);
+				}
+			});
+
+			docsList.appendChild(item);
 		}
 	}
 
@@ -769,35 +937,90 @@ import { graphsAPI } from './api.js';
 		const user = getCurrentUser();
 		if (!user) {
 			setError('Please login to save graphs to cloud');
+			alert('Please login to save graphs to cloud');
 			return;
 		}
 
 		try {
+			console.log('Saving graph...');
 			const config = collectUserConfig();
-			const name = prompt('Enter graph name:', 'My Graph');
-			if (!name) return;
+			console.log('Config collected:', config);
+			
+			// Get graph name
+			let name = currentGraphId ? savedGraphs.find(g => g.id === currentGraphId)?.name : null;
+			const newName = prompt('Enter graph name:', name || 'My Graph');
+			if (!newName || newName.trim() === '') {
+				console.log('Save cancelled: no name provided');
+				return;
+			}
+			name = newName.trim();
 
 			if (currentGraphId) {
+				console.log('Updating existing graph:', currentGraphId);
 				await graphsAPI.update(currentGraphId, { name, config });
 				setError('');
+				console.log('Graph updated successfully');
 			} else {
+				console.log('Creating new graph');
 				const result = await graphsAPI.create(name, config);
-				currentGraphId = result.id;
-				setError('');
+				console.log('Graph created:', result);
+				if (result && result.id) {
+					currentGraphId = result.id;
+					setError('');
+					console.log('Graph saved successfully with id:', currentGraphId);
+				} else {
+					throw new Error('Invalid response from server: missing graph id');
+				}
 			}
 			await loadSavedGraphs();
+			// Show success message
+			const successMsg = currentGraphId ? 'Graph updated successfully!' : 'Graph saved successfully!';
+			setError('');
+			// Optionally show a brief success indicator
+			console.log(successMsg);
 		} catch (error) {
+			console.error('Save error:', error);
 			setError('Failed to save: ' + error.message);
+			alert('Failed to save graph: ' + error.message);
 		}
 	}
 
 	async function loadGraph(id) {
 		try {
+			console.log('Loading graph with id:', id);
 			const graph = await graphsAPI.getById(id);
-			applyConfig(graph.config);
+			console.log('Graph loaded:', graph);
+			
+			if (!graph) {
+				throw new Error('Graph not found');
+			}
+			
+			// Handle both direct config and nested config
+			const config = graph.config || graph;
+			if (!config) {
+				throw new Error('Invalid graph data: no config found');
+			}
+			
+			// Ensure config has required structure
+			if (!config.series && !config.xMin && !config.xMax) {
+				throw new Error('Invalid graph config format');
+			}
+			
+			applyConfig(config);
 			currentGraphId = id;
 			setError('');
+			
+			// Refresh the docs list to show current graph as active
+			renderDocsList();
+			
+			// Close docs sidebar after loading
+			if (docsSidebar) {
+				docsSidebar.classList.remove('open');
+			}
+			
+			console.log('Graph loaded successfully');
 		} catch (error) {
+			console.error('Load graph error:', error);
 			setError('Failed to load: ' + error.message);
 		}
 	}
@@ -817,20 +1040,53 @@ import { graphsAPI } from './api.js';
 	async function showShareDialog(graphId) {
 		try {
 			const result = await graphsAPI.getShareLink(graphId);
-			const url = window.location.origin + '/share/' + result.shareToken;
+			// Use the shareUrl from backend if available, otherwise construct it
+			const url = result.shareUrl || `${window.location.origin}?share=${result.shareToken}`;
 			const shareText = `Share this graph: ${url}`;
 			if (navigator.share) {
 				await navigator.share({ title: 'Graph Plotter', text: shareText, url });
 			} else {
-				prompt('Share link (copy this):', url);
+				// Use a better method to copy to clipboard
+				try {
+					await navigator.clipboard.writeText(url);
+					alert('Share link copied to clipboard!\n\n' + url);
+				} catch (e) {
+					// Fallback to prompt if clipboard API fails
+					prompt('Share link (copy this):', url);
+				}
 			}
 		} catch (error) {
 			setError('Failed to get share link: ' + error.message);
+			console.error('Share link error:', error);
 		}
 	}
 
 	saveGraphBtn.addEventListener('click', saveCurrentGraph);
 	refreshGraphsBtn.addEventListener('click', loadSavedGraphs);
+
+	// Documents sidebar controls
+	docsToggleBtn.addEventListener('click', () => {
+		docsSidebar.classList.add('open');
+		loadSavedGraphs(); // Refresh list when opening
+	});
+	docsCloseBtn.addEventListener('click', () => {
+		docsSidebar.classList.remove('open');
+	});
+	docsSaveBtn.addEventListener('click', async () => {
+		await saveCurrentGraph();
+		loadSavedGraphs();
+	});
+	docsRefreshBtn.addEventListener('click', () => {
+		loadSavedGraphs();
+	});
+	// Close sidebar when clicking outside
+	document.addEventListener('click', (e) => {
+		if (docsSidebar.classList.contains('open') && 
+		    !docsSidebar.contains(e.target) && 
+		    !docsToggleBtn.contains(e.target)) {
+			docsSidebar.classList.remove('open');
+		}
+	});
 
 	// Update topbar based on auth state
 	onAuthStateChanged((user) => {
@@ -852,6 +1108,8 @@ import { graphsAPI } from './api.js';
 			loginOpenBtn.hidden = false;
 			myGraphsSection.hidden = true;
 			currentGraphId = null;
+			savedGraphs = [];
+			renderSavedGraphs();
 		}
 	});
 

@@ -20,7 +20,7 @@ For basic usage without cloud features:
 # Option 1: Open directly (may have CORS restrictions)
 # Just open index.html in your browser
 
-# Option 2: Serve locally (recommended)
+f# Option 2: Serve locally (recommended)
 python -m http.server 5174
 # Then open http://localhost:5174
 ```
